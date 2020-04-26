@@ -20,8 +20,52 @@ PROJECT_DIR="$(cat $ENV_DIR/PROJECT_DIR)"
 INSTALL_DIR=$BUILD_DIR
 BUILD_DIR=$BUILD_DIR/$PROJECT_DIR
 
-source $LIB_DIR/common.sh
-source <(curl --retry 3 -fsSL $BUILDPACK_STDLIB_URL)
+
+# By default gradle will write its cache in `$BUILD_DIR/.gradle`. Rather than
+# using the --project-cache-dir option, which muddies up the command, we
+# symlink this directory to the cache.
+create_project_cache_symlink() {
+  local buildpackCacheDir="${1:?}/.gradle-project"
+  local projectCacheLink="${2:?}/.gradle"
+  if [ ! -d "$projectCacheLink" ]; then
+    mkdir -p "$buildpackCacheDir"
+    ln -s "$buildpackCacheDir" "$projectCacheLink"
+    trap "rm -f $projectCacheLink" EXIT
+  fi
+}
+
+install_jdk() {
+  local install_dir=${1:?}
+  local cache_dir=${2:?}
+
+  let start=$(nowms)
+  JVM_COMMON_BUILDPACK=${JVM_COMMON_BUILDPACK:-https://buildpack-registry.s3.amazonaws.com/buildpacks/heroku/jvm.tgz}
+  mkdir -p /tmp/jvm-common
+  curl --retry 3 --silent --location $JVM_COMMON_BUILDPACK | tar xzm -C /tmp/jvm-common --strip-components=1
+  source /tmp/jvm-common/bin/util
+  source /tmp/jvm-common/bin/java
+  source /tmp/jvm-common/opt/jdbc.sh
+  mtime "jvm-common.install.time" "${start}"
+
+  let start=$(nowms)
+  install_java_with_overlay "${install_dir}" "${cache_dir}"
+  mtime "jvm.install.time" "${start}"
+}
+
+# Usage: $ export-env ENV_DIR WHITELIST BLACKLIST
+# Exports the environment variables defined in the given directory.
+export_env() {
+  local env_dir=${1:-$ENV_DIR}
+  local whitelist=${2:-''}
+  local blacklist="$(_env_blacklist $3)"
+  if [ -d "$env_dir" ]; then
+    for e in $(ls $env_dir); do
+      echo "$e" | grep -E "$whitelist" | grep -qvE "$blacklist" &&
+      export "$e=$(cat $env_dir/$e)"
+      :
+    done
+  fi
+}
 
 export_env $ENV_DIR "." "JAVA_OPTS|JAVA_TOOL_OPTIONS"
 
@@ -37,9 +81,6 @@ create_project_cache_symlink "$CACHE_DIR" "$BUILD_DIR"
 BUILDCMD="./gradlew build -x test"
 
 cd $BUILD_DIR
-
-[ -n "$(find . -type f -name "*.kt")" ] && mcount "kotlin.source"
-[ -n "$(find . -type f -name "*.groovy")" ] && mcount "groovy.source"
 
 # build app
 echo "-----> Building Gradle app..."
