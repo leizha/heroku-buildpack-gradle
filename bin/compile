@@ -16,6 +16,10 @@ BUILD_DIR=$1
 CACHE_DIR=$2
 ENV_DIR=$3
 
+PROJECT_DIR="$(cat $ENV_DIR/PROJECT_DIR)"
+PREV_BUILD_DIR=$BUILD_DIR
+BUILD_DIR=$BUILD_DIR/$PROJECT_DIR
+
 source $LIB_DIR/common.sh
 source $LIB_DIR/failures.sh
 source <(curl --retry 3 -fsSL $BUILDPACK_STDLIB_URL)
@@ -90,3 +94,6 @@ fi
 rm -rf "$CACHE_DIR/.gradle/nodejs"
 
 mtime "build.time" "${start}"
+
+mv $BUILD_DIR/build $PREV_BUILD_DIR
+
