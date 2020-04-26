@@ -26,30 +26,6 @@ source <(curl --retry 3 -fsSL $BUILDPACK_STDLIB_URL)
 
 export_env $ENV_DIR "." "JAVA_OPTS|JAVA_TOOL_OPTIONS"
 
-if has_stage_task $BUILD_DIR; then
-  mcount "task.stage"
-  DEFAULT_GRADLE_TASK="stage"
-elif is_spring_boot $BUILD_DIR; then
-  if is_webapp_runner $BUILD_DIR; then
-    echo "-----> Spring Boot and Webapp Runner detected"
-    mcount "task.webapprunner"
-  else
-    echo "-----> Spring Boot detected"
-    mcount "task.spring"
-  fi
-  DEFAULT_GRADLE_TASK="build -x test"
-elif is_ratpack $BUILD_DIR; then
-  echo "-----> Ratpack detected"
-  mcount "task.ratpack"
-  DEFAULT_GRADLE_TASK="installDist -x test"
-else
-  DEFAULT_GRADLE_TASK="stage"
-fi
-
-if [ -z "$GRADLE_TASK" ]; then
-  GRADLE_TASK="${DEFAULT_GRADLE_TASK}"
-fi
-
 install_jdk "${INSTALL_DIR}" "${CACHE_DIR}"
 
 export GRADLE_OPTS=${GRADLE_OPTS-"-Dorg.gradle.daemon=false -Dorg.gradle.internal.launcher.welcomeMessageEnabled=false"}
@@ -59,10 +35,7 @@ export GRADLE_USER_HOME=${GRADLE_USER_HOME:-$CACHE_DIR/.gradle}
 
 create_project_cache_symlink "$CACHE_DIR" "$BUILD_DIR"
 
-BUILDCMD="./gradlew"
-chmod +x ${BUILD_DIR}/gradlew
-
-BUILDCMD="$BUILDCMD $GRADLE_TASK"
+BUILDCMD="./gradlew build -x test"
 
 cd $BUILD_DIR
 
@@ -73,19 +46,14 @@ cd $BUILD_DIR
 echo "-----> Building Gradle app..."
 echo "-----> executing $BUILDCMD"
 
-buildLogFile=$(create_build_log_file)
-
-let start=$(nowms)
-$BUILDCMD 2>&1 | output $buildLogFile
+$BUILDCMD 2>&1
 
 if [ "${PIPESTATUS[*]}" != "0 0" ]; then
-  handle_gradle_errors $buildLogFile
+  echo "gradle build failed. aborting"
+  exit 1
 fi
 
 # https://github.com/heroku/heroku-buildpack-gradle/issues/49
 rm -rf "$CACHE_DIR/.gradle/nodejs"
 
-mtime "build.time" "${start}"
-
 mv $BUILD_DIR/build $INSTALL_DIR
-
