@@ -47,7 +47,7 @@ echo "-----> executing $BUILDCMD"
 
 $BUILDCMD 2>&1
 
-if [ "${PIPESTATUS[*]}" != "0 0" ]; then
+if [ $? -ne 0 ]; then
   echo "gradle build failed. aborting"
   exit 1
 fi
