@@ -21,7 +21,6 @@ INSTALL_DIR=$BUILD_DIR
 BUILD_DIR=$BUILD_DIR/$PROJECT_DIR
 
 source $LIB_DIR/common.sh
-source $LIB_DIR/failures.sh
 source <(curl --retry 3 -fsSL $BUILDPACK_STDLIB_URL)
 
 export_env $ENV_DIR "." "JAVA_OPTS|JAVA_TOOL_OPTIONS"
